@@ -1,6 +1,6 @@
 # GLM-5.3-Flash + DFlash2 on DGX Station GB300 (SM100)
 
-First-known **DFlash2 speculative decoding for GLM-5.3-Flash on a GB300 / SM100** (NVIDIA DGX Station class).
+First-known (to me!) **DFlash2 speculative decoding for GLM-5.3-Flash on a GB300 / SM100** (NVIDIA DGX Station class).
 
 This is an **SM100 adaptation** of [tonyd2wild's GB10/SM121 DFlash2 overlay](https://github.com/tonyd2wild/GLM-5.3-Flash-NVFP4-DFlash2-2x-DGX-Spark). The vLLM fork point is identical (`0.1.dev20051+g487ecf187`); we re-derived the GLM-5-Next KV-cache geometry for GB300 and validated it at build time before the first boot.
 
