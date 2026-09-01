@@ -24,6 +24,17 @@ The published DFlash2 recipes for GLM-5.3-Flash target DGX Spark / GB10 (SM121).
 
 ## Quickstart
 
+### Pull the prebuilt image (GHCR)
+
+A prebuilt `vllm-glm53-dflash2` image is published to GHCR (SM100/GB300 build, 2026-09-01):
+
+```bash
+docker pull ghcr.io/ebfio/glm53-flash-dflash2-gb300:latest
+# pin: ghcr.io/ebfio/glm53-flash-dflash2-gb300:sm100-gb300-20260901
+```
+
+### Or build it yourself
+
 Dockerfile builds a ~25 s overlay on the public `vllm/vllm-openai:glm53-flash` image (same fork point as the overlay). No source build, no B12X.
 
 ```bash
