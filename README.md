@@ -51,7 +51,6 @@ docker run --rm --gpus '"device=<GB300-uuid>"' \
   -e VLLM_SSM_CONV_STATE_LAYOUT=DS \
   -e VLLM_KV_CACHE_LAYOUT=HND \
   -e VLLM_WEIGHT_OFFLOADING_DISABLE_PIN_MEMORY=1 \
-  -e PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
   vllm-glm53-dflash2:latest \
   --model /models/huggingface-cache/hub/models--local-inference-lab--GLM-5.3-Flash-NVFP4/snapshots/<snapshot> \
   --tensor-parallel-size 1 \
@@ -101,3 +100,7 @@ overlay/
 - The **drafter** (`incoai/GLM-5.3-Flash-DFlash2`) is **CC BY-NC-ND 4.0** (non-commercial). Respect its terms.
 - DFlash2 drafts **text only**; multimodal (image/video) requests pass through unspeculated.
 - Port validated on one GB300 (SM100) at TP1; other SM100/SM120 configs are untested.
+
+## Modal B300
+
+This fork also contains a Modal-native B300 deployment path with CPU-only model downloads. See [MODAL.md](MODAL.md).

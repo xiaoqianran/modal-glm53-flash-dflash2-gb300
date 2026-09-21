@@ -1,13 +1,23 @@
 FROM vllm/vllm-openai:glm53-flash
-RUN echo "dflash2-overlay-sm100-20260901"
+RUN echo "dflash2-overlay-sm100-20260901-modal-compat"
 ARG VLLM=/usr/local/lib/python3.12/dist-packages/vllm
-COPY overlay/qwen3_dflash2.py        $VLLM/model_executor/models/qwen3_dflash2.py
-COPY overlay/dflash2/                $VLLM/v1/worker/gpu/spec_decode/dflash2/
+
+# Keep newer upstream DFlash2 code when the base image already contains it.
+# Fall back to the repository copy only for older glm53-flash images.
+COPY overlay/qwen3_dflash2.py /tmp/qwen3_dflash2.py
+COPY overlay/dflash2/ /tmp/dflash2/
+RUN test -f "$VLLM/model_executor/models/qwen3_dflash2.py" \
+ || cp /tmp/qwen3_dflash2.py "$VLLM/model_executor/models/qwen3_dflash2.py"
+RUN test -f "$VLLM/v1/worker/gpu/spec_decode/dflash2/speculator.py" \
+ || { mkdir -p "$VLLM/v1/worker/gpu/spec_decode/dflash2" \
+      && cp -r /tmp/dflash2/. "$VLLM/v1/worker/gpu/spec_decode/dflash2/"; }
+
 COPY overlay/patch_registry_and_select.py /tmp/patch_registry_and_select.py
-COPY overlay/patch_glm_aux_capture.py       /tmp/patch_glm_aux_capture.py
-COPY overlay/patch_kv_page_lcm2.py          /tmp/patch_kv_page_lcm2.py
-COPY overlay/patch_glm5_drafter_group.py    /tmp/patch_glm5_drafter_group.py
+COPY overlay/patch_glm_aux_capture.py /tmp/patch_glm_aux_capture.py
+COPY overlay/patch_kv_page_lcm2.py /tmp/patch_kv_page_lcm2.py
+COPY overlay/patch_glm5_drafter_group.py /tmp/patch_glm5_drafter_group.py
 COPY overlay/sim_glm5_drafter_hades.py /tmp/sim_glm5_drafter_hades.py
+
 RUN python3 /tmp/patch_registry_and_select.py \
  && python3 /tmp/patch_glm_aux_capture.py \
  && python3 /tmp/patch_kv_page_lcm2.py \

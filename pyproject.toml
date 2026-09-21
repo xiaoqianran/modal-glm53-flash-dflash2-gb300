@@ -1,0 +1,14 @@
+[project]
+name = "modal-glm53-flash-dflash2-gb300"
+version = "0.1.0"
+description = "Modal B300 deployment for GLM-5.3-Flash NVFP4 + DFlash2"
+requires-python = ">=3.12"
+dependencies = [
+    "modal==1.5.4",
+    "anyio==4.14.2",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.12,<1",
+]

@@ -120,7 +120,7 @@ patch_file(
     "model_executor/models/qwen3_dflash.py",
     [
         (
-            "SM121-PORT causal",
+            'is_causal = getattr(config, "is_causal", None)',
             '    """``dflash_config.causal`` overrides all layers; else only SWA'
             ' layers causal."""\n'
             '    override = (getattr(config, "dflash_config", None) or {}).get("causal")\n',

@@ -159,15 +159,11 @@ class Glm5NextForCausalLM(
 
 EDIT_COND_GEN_ANCHOR = """\
 class Glm5NextForConditionalGeneration(
-    Glm4vForConditionalGeneration, HasInnerState, IsHybrid
-):
-"""
+    Glm4vForConditionalGeneration, HasInnerState, IsHybrid"""
 
 EDIT_COND_GEN_NEW = """\
 class Glm5NextForConditionalGeneration(
-    Glm4vForConditionalGeneration, HasInnerState, IsHybrid, SupportsEagle3
-):
-"""
+    Glm4vForConditionalGeneration, HasInnerState, IsHybrid, SupportsEagle3"""
 
 EDITS: list[tuple[str, str, str]] = [
     ("import EagleModelMixin + SupportsEagle3", EDIT_IMPORTS_ANCHOR, EDIT_IMPORTS_NEW),
