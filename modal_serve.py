@@ -150,16 +150,9 @@ def _require_compile_cache() -> dict:
     return payload
 
 
-def _build_vllm_command() -> list[str]:
-    speculative = json.dumps(
-        {
-            "method": "dflash",
-            "model": str(DRAFTER_DIR),
-            "num_speculative_tokens": 7,
-        },
-        separators=(",", ":"),
-    )
-
+def _build_vllm_command(spec_mode: str = "dflash2") -> list[str]:
+    if spec_mode not in {"dflash2", "ar"}:
+        raise ValueError("spec_mode must be 'dflash2' or 'ar'")
     cmd = [
         "vllm",
         "serve",
@@ -176,8 +169,6 @@ def _build_vllm_command() -> list[str]:
         MAX_MODEL_LEN,
         "--max-num-seqs",
         MAX_NUM_SEQS,
-        "--speculative-config",
-        speculative,
         "--tool-call-parser",
         "glm47",
         "--reasoning-parser",
@@ -191,6 +182,17 @@ def _build_vllm_command() -> list[str]:
         "info",
     ]
 
+    if spec_mode == "dflash2":
+        speculative = json.dumps(
+            {
+                "method": "dflash",
+                "model": str(DRAFTER_DIR),
+                "num_speculative_tokens": 7,
+            },
+            separators=(",", ":"),
+        )
+        cmd += ["--speculative-config", speculative]
+
     if not ENABLE_MULTIMODAL:
         cmd += [
             "--limit-mm-per-prompt",
@@ -198,6 +200,25 @@ def _build_vllm_command() -> list[str]:
         ]
 
     return cmd
+
+
+def _cache_stats() -> dict:
+    autotune = list(COMPILE_CACHE_DIR.rglob("autotune_configs.json"))
+    records = []
+    for path in autotune:
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            count = len(payload) if isinstance(payload, (dict, list)) else None
+        except (OSError, json.JSONDecodeError):
+            count = None
+        records.append(
+            {
+                "path": path.relative_to(COMPILE_CACHE_DIR).as_posix(),
+                "bytes": path.stat().st_size,
+                "entries": count,
+            }
+        )
+    return {"autotune_files": records}
 
 
 def _wait_until_ready(process: subprocess.Popen, timeout_s: int = 40 * 60) -> None:
@@ -247,6 +268,42 @@ def _warmup_once() -> None:
         print("Warmup completed.", flush=True)
 
 
+def _benchmark_chat(max_tokens: int = 256) -> dict:
+    payload = json.dumps(
+        {
+            "model": "glm-5.3-flash",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": (
+                        "Write a compact Python function for binary search and "
+                        "briefly explain its time complexity."
+                    ),
+                }
+            ],
+            "max_tokens": max_tokens,
+            "temperature": 0,
+            "reasoning_effort": "low",
+        }
+    ).encode()
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{SERVER_PORT}/v1/chat/completions",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    started = time.monotonic()
+    with urllib.request.urlopen(request, timeout=15 * 60) as response:
+        body = json.loads(response.read().decode("utf-8"))
+    elapsed = time.monotonic() - started
+    tokens = int(body.get("usage", {}).get("completion_tokens") or 0)
+    return {
+        "elapsed_s": round(elapsed, 3),
+        "completion_tokens": tokens,
+        "completion_tok_s": round(tokens / elapsed, 3) if elapsed > 0 else None,
+    }
+
+
 @app.function(
     image=serve_image,
     cpu=4,
@@ -270,6 +327,53 @@ def validate_runtime() -> dict:
     if not all(checks.values()):
         raise RuntimeError(f"Runtime validation failed: {checks}")
     return checks
+
+
+@app.function(
+    image=serve_image,
+    gpu="B300",
+    cpu=16,
+    memory=(32768, 65536),
+    volumes={
+        str(MODEL_MOUNT): models.with_mount_options(read_only=True),
+        str(COMPILE_CACHE_DIR): compile_cache,
+    },
+    timeout=60 * 60,
+    max_containers=1,
+)
+def benchmark_once(spec_mode: str = "dflash2") -> dict:
+    """One fresh Modal app run used for cold-start and AR-vs-DFlash2 comparison."""
+    _require_cached_model(TARGET_DIR, "target model")
+    if spec_mode == "dflash2":
+        _require_cached_model(DRAFTER_DIR, "DFlash2 drafter")
+    cache_manifest = _require_compile_cache()
+    cache_before = _cache_stats()
+    _prepare_runtime()
+
+    started = time.monotonic()
+    process = subprocess.Popen(_build_vllm_command(spec_mode), env=os.environ.copy())
+    try:
+        _wait_until_ready(process)
+        ready_s = time.monotonic() - started
+        inference = _benchmark_chat()
+        cache_after = _cache_stats()
+        compile_cache.commit()
+        return {
+            "spec_mode": spec_mode,
+            "ready_s": round(ready_s, 3),
+            "inference": inference,
+            "cache_tag": cache_manifest.get("tag"),
+            "cache_before": cache_before,
+            "cache_after": cache_after,
+        }
+    finally:
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=30)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=10)
 
 
 @app.server(
@@ -345,6 +449,12 @@ class Server:
 
 
 @app.local_entrypoint()
-def validate():
-    print(json.dumps(validate_runtime.remote(), indent=2, sort_keys=True))
+def main(action: str = "validate", mode: str = "dflash2"):
+    if action == "validate":
+        result = validate_runtime.remote()
+    elif action == "benchmark":
+        result = benchmark_once.remote(mode)
+    else:
+        raise ValueError("action must be 'validate' or 'benchmark'")
+    print(json.dumps(result, indent=2, sort_keys=True))
 
