@@ -14,7 +14,7 @@ import modal
 APP_NAME = "glm53-flash-dflash2-b300"
 MODEL_VOLUME_NAME = "glm53-flash-dflash2-models"
 COMPILE_CACHE_VOLUME_NAME = "glm53-flash-compile-cache-v1"
-COMPILE_CACHE_TAG = "glm53-flash-dflash2-vllm0281rc1-fi0618-sm103a-b300-cache-v1"
+COMPILE_CACHE_TAG = "glm53-flash-dflash2-vllm0281rc1-fi0618-sm103a-b300-cache-v2"
 
 MODEL_MOUNT = Path("/models")
 TARGET_DIR = MODEL_MOUNT / "target"
@@ -244,28 +244,32 @@ def _wait_until_ready(process: subprocess.Popen, timeout_s: int = 40 * 60) -> No
 
 
 def _warmup_once() -> None:
-    payload = json.dumps(
-        {
-            "model": "glm-5.3-flash",
-            "messages": [{"role": "user", "content": "Reply with exactly: OK"}],
-            "max_tokens": 16,
-            "temperature": 0,
-            "reasoning_effort": "low",
-        }
-    ).encode()
-
-    request = urllib.request.Request(
-        f"http://127.0.0.1:{SERVER_PORT}/v1/chat/completions",
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-
-    with urllib.request.urlopen(request, timeout=10 * 60) as response:
-        body = response.read().decode("utf-8", errors="replace")
-        if response.status != 200:
-            raise RuntimeError(f"Warmup failed HTTP {response.status}: {body[:1000]}")
-        print("Warmup completed.", flush=True)
+    # Move DFlash2 helper-kernel JIT work off the first real user request.
+    for max_tokens, prompt in (
+        (8, "Reply with exactly: OK"),
+        (32, "List the integers 1 through 8 separated by spaces."),
+        (128, "Write a compact Python binary-search function and explain it briefly."),
+    ):
+        payload = json.dumps(
+            {
+                "model": "glm-5.3-flash",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": max_tokens,
+                "temperature": 0,
+                "reasoning_effort": "low",
+            }
+        ).encode()
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{SERVER_PORT}/v1/chat/completions",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=10 * 60) as response:
+            body = response.read().decode("utf-8", errors="replace")
+            if response.status != 200:
+                raise RuntimeError(f"Warmup failed HTTP {response.status}: {body[:1000]}")
+    print("DFlash2 startup warmup completed for 8/32/128-token shapes.", flush=True)
 
 
 def _benchmark_chat(max_tokens: int = 256) -> dict:

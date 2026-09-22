@@ -12,7 +12,7 @@ import modal
 
 APP_NAME = "glm53-flash-cache-restore"
 CACHE_VOLUME_NAME = "glm53-flash-compile-cache-v1"
-CACHE_TAG = "glm53-flash-dflash2-vllm0281rc1-fi0618-sm103a-b300-cache-v1"
+CACHE_TAG = "glm53-flash-dflash2-vllm0281rc1-fi0618-sm103a-b300-cache-v2"
 RELEASE_REPO = "xiaoqianran/modal-build"
 CACHE_MOUNT = Path("/compile-cache")
 
