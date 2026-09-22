@@ -187,6 +187,7 @@ def _build_vllm_command(spec_mode: str = "dflash2") -> list[str]:
     ]
 
     if spec_mode == "dflash2":
+        cmd += ["--kv-cache-memory", "55983178619"]
         speculative = json.dumps(
             {
                 "method": "dflash",
