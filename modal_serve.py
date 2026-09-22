@@ -36,6 +36,10 @@ MAX_NUM_SEQS = os.environ.get("GLM53_MAX_NUM_SEQS", "8")
 TARGET_CONCURRENCY = int(os.environ.get("GLM53_TARGET_CONCURRENCY", "8"))
 ENABLE_MULTIMODAL = os.environ.get("GLM53_ENABLE_MULTIMODAL", "0") == "1"
 ENABLE_WARMUP = os.environ.get("GLM53_WARMUP", "1") == "1"
+BENCHMARK_PROMPT = (
+    "Write a compact Python function for binary search and "
+    "briefly explain its time complexity."
+)
 
 app = modal.App(APP_NAME)
 models = modal.Volume.from_name(MODEL_VOLUME_NAME, create_if_missing=True)
@@ -249,6 +253,7 @@ def _warmup_once() -> None:
         (8, "Reply with exactly: OK"),
         (32, "List the integers 1 through 8 separated by spaces."),
         (128, "Write a compact Python binary-search function and explain it briefly."),
+        (256, BENCHMARK_PROMPT),
     ):
         payload = json.dumps(
             {
@@ -269,7 +274,7 @@ def _warmup_once() -> None:
             body = response.read().decode("utf-8", errors="replace")
             if response.status != 200:
                 raise RuntimeError(f"Warmup failed HTTP {response.status}: {body[:1000]}")
-    print("DFlash2 startup warmup completed for 8/32/128-token shapes.", flush=True)
+    print("DFlash2 startup warmup completed for 8/32/128/256-token shapes.", flush=True)
 
 
 def _benchmark_chat(max_tokens: int = 256) -> dict:
@@ -279,10 +284,7 @@ def _benchmark_chat(max_tokens: int = 256) -> dict:
             "messages": [
                 {
                     "role": "user",
-                    "content": (
-                        "Write a compact Python function for binary search and "
-                        "briefly explain its time complexity."
-                    ),
+                    "content": BENCHMARK_PROMPT,
                 }
             ],
             "max_tokens": max_tokens,
