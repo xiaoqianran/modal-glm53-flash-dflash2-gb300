@@ -359,12 +359,16 @@ def benchmark_once(spec_mode: str = "dflash2") -> dict:
     try:
         _wait_until_ready(process)
         ready_s = time.monotonic() - started
+        warmup_started = time.monotonic()
+        _warmup_once()
+        warmup_s = time.monotonic() - warmup_started
         inference = _benchmark_chat()
         cache_after = _cache_stats()
         compile_cache.commit()
         return {
             "spec_mode": spec_mode,
             "ready_s": round(ready_s, 3),
+            "warmup_s": round(warmup_s, 3),
             "inference": inference,
             "cache_tag": cache_manifest.get("tag"),
             "cache_before": cache_before,
