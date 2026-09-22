@@ -35,7 +35,7 @@ docker pull ghcr.io/ebfio/glm53-flash-dflash2-gb300:latest
 
 ### Or build it yourself
 
-Dockerfile builds a ~25 s overlay on the public `vllm/vllm-openai:glm53-flash` image (same fork point as the overlay). No source build, no B12X.
+Dockerfile builds the overlay on the immutable known-good `vllm/vllm-openai@sha256:2c6da6c6f16ed15c91e412d896dba13701f25fe1861eaec9ddaa4db34d1d21c4` image (`vLLM 0.1.dev20051+g487ecf187`, FlashInfer 0.6.17). Do not replace this with the floating `glm53-flash` tag: that tag has moved to incompatible runtime builds. No source build, no B12X.
 
 ```bash
 docker build -t vllm-glm53-dflash2:latest .
@@ -57,7 +57,7 @@ docker run --rm --gpus '"device=<GB300-uuid>"' \
   --kv-cache-dtype fp8 \
   --max-model-len 1000000 \
   --speculative-config '{"method":"dflash","model":"/models/huggingface-cache/hub/models--incoai--GLM-5.3-Flash-DFlash2/snapshots/<snapshot>","num_speculative_tokens":7}' \
-  --reasoning-parser deepseek_r1 \
+  --reasoning-parser glm47 \
   --tool-call-parser glm47 \
   --enable-auto-tool-choice \
   --served-model-name glm-5.3-flash
@@ -76,7 +76,7 @@ docker run --rm --gpus '"device=<GB300-uuid>"' \
 ## Files
 
 ```
-Dockerfile                  overlay onto vllm/vllm-openai:glm53-flash, build-time geometry check
+Dockerfile                  overlay onto pinned known-good vLLM image digest, build-time geometry check
 overlay/
   qwen3_dflash2.py          DFlash2 drafter model (port from tonyd2wild overlay)
   dflash2/speculator.py     DFlash2 speculator

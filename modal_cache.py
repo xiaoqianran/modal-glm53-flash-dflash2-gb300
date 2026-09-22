@@ -11,8 +11,8 @@ from pathlib import Path
 import modal
 
 APP_NAME = "glm53-flash-cache-restore"
-CACHE_VOLUME_NAME = "glm53-flash-compile-cache-v1"
-CACHE_TAG = "glm53-flash-dflash2-vllm0281rc1-fi0618-sm103a-b300-cache-v2"
+CACHE_VOLUME_NAME = "glm53-flash-compile-cache-good-v1"
+CACHE_TAG = "glm53-flash-dflash2-g487ecf187-fi0617-sm103a-b300-cache-v1"
 RELEASE_REPO = "xiaoqianran/modal-build"
 CACHE_MOUNT = Path("/compile-cache")
 
@@ -128,6 +128,30 @@ def restore(force: bool = False) -> dict:
         }
 
 
+
+@app.function(
+    image=image,
+    volumes={str(CACHE_MOUNT): cache},
+    cpu=1,
+    memory=1024,
+    timeout=300,
+)
+def seed(force: bool = False) -> dict:
+    """Create a clean bootstrap marker for a brand-new runtime-specific cache."""
+    marker = CACHE_MOUNT / ".glm53-precompile.json"
+    if marker.exists() and not force:
+        payload = json.loads(marker.read_text(encoding="utf-8"))
+        if payload.get("tag") == CACHE_TAG:
+            return {"cached": True, "manifest": payload}
+    payload = {
+        "tag": CACHE_TAG,
+        "contains_model_weights": False,
+        "source": "fresh-bootstrap",
+    }
+    marker.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    cache.commit()
+    return {"cached": False, "manifest": payload}
+
 @app.function(
     image=image,
     volumes={str(CACHE_MOUNT): cache},
@@ -160,8 +184,10 @@ def inspect() -> dict:
 def main(action: str = "inspect", force: bool = False):
     if action == "restore":
         print(json.dumps(restore.remote(force), indent=2, sort_keys=True))
+    elif action == "seed":
+        print(json.dumps(seed.remote(force), indent=2, sort_keys=True))
     elif action == "inspect":
         print(json.dumps(inspect.remote(), indent=2, sort_keys=True))
     else:
-        raise ValueError("action must be 'restore' or 'inspect'")
+        raise ValueError("action must be 'restore', 'seed', or 'inspect'")
 

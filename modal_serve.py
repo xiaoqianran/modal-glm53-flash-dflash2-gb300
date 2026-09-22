@@ -13,8 +13,8 @@ import modal
 
 APP_NAME = "glm53-flash-dflash2-b300"
 MODEL_VOLUME_NAME = "glm53-flash-dflash2-models"
-COMPILE_CACHE_VOLUME_NAME = "glm53-flash-compile-cache-v1"
-COMPILE_CACHE_TAG = "glm53-flash-dflash2-vllm0281rc1-fi0618-sm103a-b300-cache-v2"
+COMPILE_CACHE_VOLUME_NAME = "glm53-flash-compile-cache-good-v1"
+COMPILE_CACHE_TAG = "glm53-flash-dflash2-g487ecf187-fi0617-sm103a-b300-cache-v1"
 
 MODEL_MOUNT = Path("/models")
 TARGET_DIR = MODEL_MOUNT / "target"
@@ -22,12 +22,13 @@ DRAFTER_DIR = MODEL_MOUNT / "drafter"
 COMPILE_CACHE_DIR = Path("/compile-cache")
 OVERLAY_DIR = Path("/opt/glm53-overlay")
 
-# vllm/vllm-openai:glm53-flash already ships vLLM under the distro Python.
+# The pinned glm53-flash image ships vLLM under the distro Python.
 # Modal adds its own Python at /usr/local/bin for lifecycle code, so all vLLM
 # patch scripts must explicitly use the original interpreter.
 VLLM_PYTHON = "/usr/bin/python3"
 VLLM_ROOT = Path("/usr/local/lib/python3.12/dist-packages/vllm")
 SERVER_PORT = 8000
+API_SECRET_NAME = "glm53-api-key"
 
 # DFlash2 is strongest for interactive C1-C8 workloads in the upstream GB300
 # recipe. Keep a single B300 replica until we benchmark Modal-specific behavior.
@@ -44,13 +45,21 @@ BENCHMARK_PROMPT = (
 app = modal.App(APP_NAME)
 models = modal.Volume.from_name(MODEL_VOLUME_NAME, create_if_missing=True)
 compile_cache = modal.Volume.from_name(COMPILE_CACHE_VOLUME_NAME, create_if_missing=True)
+api_secret = modal.Secret.from_name(API_SECRET_NAME)
+
+
+def _api_key() -> str:
+    value = os.environ.get("GLM53_API_KEY")
+    if not value:
+        raise RuntimeError(f"Modal Secret {API_SECRET_NAME!r} must define GLM53_API_KEY.")
+    return value
 
 # The specialized vLLM image cannot accept additional RUN layers in Modal's
 # current builder. Instead, keep it immutable and mount this repo's small
 # overlay at runtime. Image construction and validation remain CPU-only.
 serve_image = (
     modal.Image.from_registry(
-        "vllm/vllm-openai:glm53-flash",
+        "vllm/vllm-openai@sha256:2c6da6c6f16ed15c91e412d896dba13701f25fe1861eaec9ddaa4db34d1d21c4",
         add_python="3.12",
     )
     .entrypoint([])
@@ -180,6 +189,8 @@ def _build_vllm_command(spec_mode: str = "dflash2") -> list[str]:
         "--enable-auto-tool-choice",
         "--served-model-name",
         "glm-5.3-flash",
+        "--api-key",
+        _api_key(),
         "--generation-config",
         "vllm",
         "--uvicorn-log-level",
@@ -268,7 +279,10 @@ def _warmup_once() -> None:
         request = urllib.request.Request(
             f"http://127.0.0.1:{SERVER_PORT}/v1/chat/completions",
             data=payload,
-            headers={"Content-Type": "application/json"},
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {_api_key()}",
+            },
             method="POST",
         )
         with urllib.request.urlopen(request, timeout=10 * 60) as response:
@@ -296,7 +310,10 @@ def _benchmark_chat(max_tokens: int = 256) -> dict:
     request = urllib.request.Request(
         f"http://127.0.0.1:{SERVER_PORT}/v1/chat/completions",
         data=payload,
-        headers={"Content-Type": "application/json"},
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {_api_key()}",
+        },
         method="POST",
     )
     started = time.monotonic()
@@ -347,6 +364,7 @@ def validate_runtime() -> dict:
     },
     timeout=60 * 60,
     max_containers=1,
+    secrets=[api_secret],
 )
 def benchmark_once(spec_mode: str = "dflash2") -> dict:
     """One fresh Modal app run used for cold-start and AR-vs-DFlash2 comparison."""
@@ -397,11 +415,13 @@ def benchmark_once(spec_mode: str = "dflash2") -> dict:
         str(COMPILE_CACHE_DIR): compile_cache,
     },
     port=SERVER_PORT,
+    unauthenticated=True,
+    secrets=[api_secret],
     startup_timeout=45 * 60,
     min_containers=0,
     max_containers=1,
     target_concurrency=TARGET_CONCURRENCY,
-    scaledown_window=30 * 60,
+    scaledown_window=15 * 60,
     exit_grace_period=5 * 60,
 )
 class Server:

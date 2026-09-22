@@ -1,4 +1,4 @@
-FROM vllm/vllm-openai:glm53-flash
+FROM vllm/vllm-openai@sha256:2c6da6c6f16ed15c91e412d896dba13701f25fe1861eaec9ddaa4db34d1d21c4
 RUN echo "dflash2-overlay-sm100-20260901-modal-compat"
 ARG VLLM=/usr/local/lib/python3.12/dist-packages/vllm
 
